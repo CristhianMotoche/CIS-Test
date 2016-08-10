@@ -3,6 +3,21 @@
 # Este script está basado en el benchmark CIS CentOS Linux 7 v2.1.0
 # Enlace: https://benchmarks.cisecurity.org/tools2/linux/CIS_CentOS_Linux_7_Benchmark_v2.1.0.pdf
 
+function ensure_set_value_sshd_config {
+  local pattern="${1}"
+  local result="${2}"
+
+  grep "${pattern}" /etc/ssh/sshd_config | grep "${result}"
+}
+
+function ensure_permission_on_file_or_directory {
+  stat "${1}" | grep "Access: (0600/-rw-------)  Uid: (    0/    root)   Gid: (    0/    root)"
+}
+
+function ensure_audit_logs_are_not_deleted {
+  grep max_log_file_action /etc/audit/auditd.conf | grep keep_logs
+}
+
 function ensure_packet_redirect_is_disable {
   if [[ "$(sysctl net.ipv4.conf.all.send_redirects)" == "net.ipv4.conf.all.send_redirects = 0" ]] &&\
     [[ "$(sysctl net.ipv4.conf.default.send_redirects)" == "net.ipv4.conf.default.send_redirects = 0" ]]; then
@@ -20,6 +35,13 @@ function ensure_ip_forwarding_disable {
 
 function ensure_port_not_listening {
   netstat -an | grep LIST | grep ":25[[:space:]]"
+}
+
+function ensure_service_is_enabled {
+  if [[ "$(systemctl is-enabled "${1}")" == "enabled" ]]; then
+    return 0
+  fi
+  return 1
 }
 
 function ensure_service_is_disabled {
@@ -84,7 +106,10 @@ function check_sticky_bit {
 # Funcion para comprobar si una particion existe
 # y si tiene cierto permiso
 function check_permision_on_partition {
-  mount | grep "${2}" | grep "${1}"
+  local permissions="${1}"
+  local file="${2}"
+
+  mount | grep ${permissions} | grep ${file}
 }
 
 # Funcion para comprobar si una particion existe
@@ -121,6 +146,20 @@ function function_wrapper {
   fi
 }
 
+function function_wrapper_2 {
+# comprobar si su resultado es correcto o no.
+  func_name=$1
+  shift
+  arg1=$1
+  arg2=$2
+  ${func_name} ${arg1} ${arg2}
+  if [[ "$?" -eq 0 ]]; then
+    echo ${func_name} ${arg1} ${arg2} OK
+  else
+    echo ${func_name} ${arg1} ${arg2} ERROR
+  fi
+}
+
 # Funcion principal que realiza la llamada a las funciones
 # que comprueban las auditorias del benchmark
 function main {
@@ -153,13 +192,13 @@ function main {
   function_wrapper check_partition /tmp
 
   # CIS 1.1.3
-  function_wrapper check_permision_on_partition nodev /tmp
+  function_wrapper_2 check_permision_on_partition nodev /tmp
 
   # CIS 1.1.4
-  function_wrapper check_permision_on_partition nosuid /tmp
+  function_wrapper_2 check_permision_on_partition nosuid /tmp
 
   # CIS 1.1.5
-  function_wrapper check_permision_on_partition noexec /tmp
+  function_wrapper_2 check_permision_on_partition noexec /tmp
 
   # CIS 1.1.6
   function_wrapper check_partition /var
@@ -168,13 +207,13 @@ function main {
   function_wrapper check_partition /var/tmp
 
   # CIS 1.1.8
-  function_wrapper check_permision_on_partition nodev /var/tmp
+  function_wrapper_2 check_permision_on_partition nodev /var/tmp
 
   # CIS 1.1.9
-  function_wrapper check_permision_on_partition nosuid /var/tmp
+  function_wrapper_2 check_permision_on_partition nosuid /var/tmp
 
   # CIS 1.1.10
-  function_wrapper check_permision_on_partition noexec /var/tmp
+  function_wrapper_2 check_permision_on_partition noexec /var/tmp
 
   # CIS 1.1.11
   function_wrapper check_partition /var/log
@@ -186,21 +225,21 @@ function main {
   function_wrapper check_partition /home
 
   # CIS 1.1.14
-  function_wrapper check_permision_on_partition nodev /home
+  function_wrapper_2 check_permision_on_partition nodev /home
 
   # CIS 1.1.15
-  function_wrapper check_permision_on_partition nodev /dev/shm
+  function_wrapper_2 check_permision_on_partition nodev /dev/shm
 
   # CIS 1.1.16
-  function_wrapper check_permision_on_partition nosuid /dev/shm
+  function_wrapper_2 check_permision_on_partition nosuid /dev/shm
 
   # CIS 1.1.17
-  function_wrapper check_permision_on_partition noexec /dev/shm
+  function_wrapper_2 check_permision_on_partition noexec /dev/shm
 
   # CIS 1.1.[18-20]
-  function_wrapper check_permision_on_external_partition nodev
-  function_wrapper check_permision_on_external_partition nosuid
-  function_wrapper check_permision_on_external_partition noexec
+  function_wrapper_2 check_permision_on_external_partition nodev
+  function_wrapper_2 check_permision_on_external_partition nosuid
+  function_wrapper_2 check_permision_on_external_partition noexec
 
   # CIS 1.1.21
   function_wrapper check_sticky_bit
@@ -295,6 +334,44 @@ function main {
 
   # CIS 3.6.1
   function_wrapper ensure_is_installed iptables
+
+  # AUDITING & LOGGING
+  # CIS 4.1.1.2
+  function_wrapper ensure_audit_logs_are_not_deleted
+
+  # CIS 4.1.2
+  function_wrapper ensure_service_is_enabled auditd
+
+  # ACCESS, AUTHENTICATION AND AUTHORIZATION
+  # CIS 5.1.1
+  function_wrapper ensure_service_is_enabled crond
+
+  # CIS 5.1.2
+  function_wrapper ensure_permission_on_file_or_directory /etc/crontab
+
+  # CIS 5.1.3
+  function_wrapper ensure_permission_on_file_or_directory /etc/cron.hourly/
+
+  # CIS 5.1.3
+  function_wrapper ensure_permission_on_file_or_directory /etc/cron.daily/
+
+  # CIS 5.1.4
+  function_wrapper ensure_permission_on_file_or_directory /etc/cron.weekly/
+
+  # CIS 5.1.5
+  function_wrapper ensure_permission_on_file_or_directory /etc/cron.monthly/
+
+  # CIS 5.1.6
+  function_wrapper ensure_permission_on_file_or_directory /etc/cron.d/
+
+  # CIS 5.2.1
+  function_wrapper ensure_permission_on_file_or_directory /etc/ssh/sshd_config
+
+  # CIS 5.2.2
+  function_wrapper_2 ensure_set_value_sshd_config "^Protocol" "Protocol2"
+
+  # CIS 5.2.3
+  function_wrapper_2 ensure_set_value_sshd_config "^LogLevel" "LogLevel INFO"
 }
 
 # Ejecucion de la funcion main
