@@ -3,6 +3,14 @@
 # Este script está basado en el benchmark CIS CentOS Linux 7 v2.1.0
 # Enlace: https://benchmarks.cisecurity.org/tools2/linux/CIS_CentOS_Linux_7_Benchmark_v2.1.0.pdf
 
+function ensure_spec_permission_on_file_or_directory {
+  local magic_numbers="${1}"
+  local permissions="${2}"
+  local file="${3}"
+
+  stat "${file}" | grep "Access: ("${magic_numbers}"/"${permissions}")  Uid: (    0/    root)   Gid: (    0/    root)"
+}
+
 function ensure_set_value_sshd_config {
   local pattern="${1}"
   local result="${2}"
@@ -160,6 +168,21 @@ function function_wrapper_2 {
   fi
 }
 
+function function_wrapper_3 {
+# comprobar si su resultado es correcto o no.
+  func_name=$1
+  shift
+  arg1=$1
+  arg2=$2
+  arg3=$3
+  ${func_name} ${arg1} ${arg2} ${arg3}
+  if [[ "$?" -eq 0 ]]; then
+    echo ${func_name} ${arg1} ${arg2} ${arg3} OK
+  else
+    echo ${func_name} ${arg1} ${arg2} ${arg3} ERROR
+  fi
+}
+
 # Funcion principal que realiza la llamada a las funciones
 # que comprueban las auditorias del benchmark
 function main {
@@ -242,7 +265,7 @@ function main {
   function_wrapper_2 check_permision_on_external_partition noexec
 
   # CIS 1.1.21
-  function_wrapper check_sticky_bit
+  # function_wrapper check_sticky_bit
 
   # CIS 1.1.22 # May Remove
   function_wrapper check_autofs_disabled
@@ -372,6 +395,22 @@ function main {
 
   # CIS 5.2.3
   function_wrapper_2 ensure_set_value_sshd_config "^LogLevel" "LogLevel INFO"
+
+  # CIS 5.2.8
+  function_wrapper_2 ensure_set_value_sshd_config "^PermitRootLogin" "PermitRootLogin no"
+
+  # SYSTEM MAINTENANCE
+  # CIS 6.1.2
+  function_wrapper_3 ensure_spec_permission_on_file_or_directory "0644" "-rw-r--r--" /etc/passwd
+
+  # CIS 6.1.3
+  function_wrapper_3 ensure_spec_permission_on_file_or_directory "0000" "----------" /etc/shadow
+
+  # CIS 6.1.4
+  function_wrapper_3 ensure_spec_permission_on_file_or_directory "0644" "-rw-r--r--" /etc/group
+
+  # CIS 6.1.5
+  function_wrapper_3 ensure_spec_permission_on_file_or_directory "0600" "-rw-------" /etc/gshadow
 }
 
 # Ejecucion de la funcion main
